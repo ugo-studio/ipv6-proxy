@@ -37,11 +37,22 @@ const server = http.createServer((req, res) => {
     res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Restricted Area"' });
     return res.end("Access denied");
   }
+  // get target url
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "");
+  } catch (err: any) {
+    res.writeHead(500);
+    return res.end(`${err.message}`);
+  }
   // generate ipv6 address from subnet
   const ipAddr = getRandomIPv6(process.env.SUBNET);
   // fetch and pipe to response
-  console.log(`Proxying ${new URL(req.url ?? "").origin} with ${ipAddr}`);
-  proxy.web(req, res, { target: req.url, localAddress: ipAddr });
+  console.log(`Proxying ${url.origin} with ${ipAddr}`);
+  proxy.web(req, res, { target: url.href, localAddress: ipAddr }, (err) => {
+    res.writeHead(500);
+    return res.end(`${err.message}`);
+  });
 });
 
 const port = Number(process.env.PORT || 4848);
