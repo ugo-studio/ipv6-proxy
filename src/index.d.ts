@@ -3,8 +3,7 @@ declare global {
     interface ProcessEnv {
       PORT?: string;
       SUBNET?: string;
-      USER?: string;
-      PASS?: string;
+      TOKENS?: string;
     }
   }
 }

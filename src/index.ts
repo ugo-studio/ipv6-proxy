@@ -1,71 +1,79 @@
 import http from "http";
 import https from "https";
-import httpProxy from "http-proxy";
+import fetch from "node-fetch";
+import { pipeline as streamPipeline } from "stream/promises";
 import denv from "@dotenvx/dotenvx";
 import { getRandomIPv6 } from "./ipv6";
 
 // load env
 denv.config();
 
-const proxy = httpProxy.createProxyServer({
-  changeOrigin: true, // Important for HTTPS
-  secure: false, // Accept self-signed certificates (optional)
-});
+// Bearer Auth tokens
+const TOKENS =
+  process.env.TOKENS?.split(",")
+    .map((e) => e.trim())
+    .filter((e) => e.length > 3) ?? [];
 
-// Basic Auth credentials (set your own)
-const USERNAME = process.env.USER;
-const PASSWORD = process.env.PASS;
-
-// Function to parse and validate Basic Auth credentials
+// Function to validate Auth tokens
 function checkAuth(req: http.IncomingMessage) {
-  if (!USERNAME || !PASSWORD) return true;
-
-  const authHeader = req.headers["authorization"];
-
-  if (!authHeader || !authHeader.startsWith("Basic ")) {
-    return false;
-  }
-  // Decode base64 credentials
-  const base64Credentials = authHeader.split(" ")[1];
-  const credentials = Buffer.from(base64Credentials, "base64").toString(
-    "ascii"
-  );
-  const [username, password] = credentials.split(":");
-  // Check if the provided credentials match the expected ones
-  return username === USERNAME && password === PASSWORD;
+  if (TOKENS.length === 0) return true;
+  const authHeader = req.headers["proxy-authorization"];
+  if (authHeader && TOKENS.includes(authHeader)) return true;
+  else return false;
 }
 
-const server = http.createServer((req, res) => {
-  // check auth
-  if (!checkAuth(req)) {
-    res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Restricted Area"' });
-    return res.end("Access denied");
-  }
-  // get target url
-  let url: URL;
+const server = http.createServer(async (req, res) => {
   try {
-    url = new URL(req.url ?? "");
+    // check auth
+    if (!checkAuth(req)) {
+      res.writeHead(401);
+      return res.end("Proxy access denied");
+    }
+    // get target url
+    let url: URL;
+    try {
+      url = new URL(String(req.url).substring(1));
+    } catch (err: any) {
+      res.writeHead(500);
+      return res.end(`${err.message}`);
+    }
+    // generate ipv6 address from subnet
+    const ipAddr = getRandomIPv6(process.env.SUBNET);
+    console.log(`Proxying ${url.origin} with ${ipAddr}`);
+    // get agent
+    const agent = new (url.protocol === "http:" ? http : https).Agent(
+      ipAddr
+        ? {
+            localAddress: ipAddr,
+            family: 6,
+          }
+        : {}
+    );
+    // fetch request
+    const reqHeaders = Object.assign(req.headers, {
+      host: url.host,
+      "proxy-authorization": undefined,
+    });
+    const reqBody = req.method === "GET" || req.method === "HEAD" ? null : req;
+    const response = await fetch(url.href, {
+      agent,
+      body: reqBody,
+      method: req.method,
+      headers: reqHeaders as any,
+      redirect: "manual",
+    });
+    // rewrite headers
+    const resHeaders = Object.fromEntries(response.headers.entries());
+    const location = response.headers.get("location");
+    if (location) resHeaders.location = `/${location}`;
+    // pipe to reponse
+    res.writeHead(response.status, resHeaders);
+    if (response.body) await streamPipeline(response.body, res);
+    return res.end();
   } catch (err: any) {
     res.writeHead(500);
     return res.end(`${err.message}`);
   }
-  // generate ipv6 address from subnet
-  const ipAddr = getRandomIPv6(process.env.SUBNET);
-  // get agent
-  const agent = new (url.protocol == "http:" ? http : https).Agent(
-    ipAddr
-      ? {
-          localAddress: ipAddr,
-          family: 6,
-        }
-      : {}
-  );
-  // fetch and pipe to response
-  console.log(`Proxying ${url.origin} with ${ipAddr}`);
-  proxy.web(req, res, { agent, target: url.href }, (err) => {
-    res.writeHead(500);
-    return res.end(`${err.message}`);
-  });
 });
 
 const port = Number(process.env.PORT || 4848);
