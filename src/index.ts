@@ -44,7 +44,7 @@ const server = http.createServer((req, res) => {
   proxy.web(req, res, { target: req.url, localAddress: ipAddr });
 });
 
-const port = Number(process.env.PORT || 4040);
+const port = Number(process.env.PORT || 4848);
 server.listen(port, () =>
   console.log(`server listening at http://localhost:${port}`)
 );
