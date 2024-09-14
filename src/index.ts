@@ -40,6 +40,7 @@ const server = http.createServer((req, res) => {
   // generate ipv6 address from subnet
   const ipAddr = getRandomIPv6(process.env.SUBNET);
   // fetch and pipe to response
+  console.log(`Proxying ${new URL(req.url ?? "").origin} with ${ipAddr}`);
   proxy.web(req, res, { target: req.url, localAddress: ipAddr });
 });
 
