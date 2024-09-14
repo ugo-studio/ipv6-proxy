@@ -1,4 +1,5 @@
 import http from "http";
+import https from "https";
 import httpProxy from "http-proxy";
 import denv from "@dotenvx/dotenvx";
 import { getRandomIPv6 } from "./ipv6";
@@ -47,9 +48,18 @@ const server = http.createServer((req, res) => {
   }
   // generate ipv6 address from subnet
   const ipAddr = getRandomIPv6(process.env.SUBNET);
+  // get agent
+  const agent = new (url.protocol == "http:" ? http : https).Agent(
+    ipAddr
+      ? {
+          localAddress: ipAddr,
+          family: 6,
+        }
+      : {}
+  );
   // fetch and pipe to response
   console.log(`Proxying ${url.origin} with ${ipAddr}`);
-  proxy.web(req, res, { target: url.href, localAddress: ipAddr }, (err) => {
+  proxy.web(req, res, { agent, target: url.href }, (err) => {
     res.writeHead(500);
     return res.end(`${err.message}`);
   });
