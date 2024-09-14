@@ -56,6 +56,6 @@ const server = http.createServer((req, res) => {
 });
 
 const port = Number(process.env.PORT || 4848);
-server.listen(port, () =>
+server.listen(port, "0.0.0.0", () =>
   console.log(`server listening at http://localhost:${port}`)
 );
