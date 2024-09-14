@@ -7,7 +7,10 @@ import { getRandomIPv6 } from "./ipv6";
 // load env
 denv.config();
 
-const proxy = httpProxy.createProxyServer({});
+const proxy = httpProxy.createProxyServer({
+  changeOrigin: true, // Important for HTTPS
+  secure: false, // Accept self-signed certificates (optional)
+});
 
 // Basic Auth credentials (set your own)
 const USERNAME = process.env.USER;
