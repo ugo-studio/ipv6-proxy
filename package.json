@@ -2,10 +2,11 @@
   "name": "ipv6-proxy",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "daemon": "pm2 start ./dist/index.js --name ipv6_proxy",
     "build": "npx esbuild ./src/index.ts --outfile=./dist/index.js --platform=node --bundle --format=cjs",
-    "start": "npm run build && npm run daemon",
-    "stop": "pm2 stop ipv6_proxy && pm2 delete ipv6_proxy"
+    "start": "node ./dist/index.js",
+    "daemon": "pm2 start ./dist/index.js --name ipv6_proxy",
+    "start-pm": "npm run build && npm run daemon",
+    "stop-pm": "pm2 stop ipv6_proxy && pm2 delete ipv6_proxy"
   },
   "devDependencies": {
     "@types/http-proxy": "^1.17.15",
@@ -15,7 +16,7 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.14.0",
     "esbuild": "^0.23.1",
-    "http-proxy": "^1.18.1",
+    "http-proxy-agent": "^7.0.2",
     "node-fetch": "^3.3.2"
   }
 }

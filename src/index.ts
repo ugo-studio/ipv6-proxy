@@ -2,6 +2,7 @@ import http from "http";
 import https from "https";
 import fetch from "node-fetch";
 import { pipeline as streamPipeline } from "stream/promises";
+import { HttpProxyAgent } from "http-proxy-agent";
 import denv from "@dotenvx/dotenvx";
 import { getRandomIPv6 } from "./ipv6";
 
@@ -29,26 +30,33 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(401);
       return res.end("Proxy access denied");
     }
+    // check if used as url proxy
+    const urlStr = String(req.url);
+    const asUrlProxy = urlStr.startsWith("/");
     // get target url
     let url: URL;
     try {
-      url = new URL(String(req.url).substring(1));
+      const urlProxy = process.env.URL_PROXY;
+      url = new URL(
+        (urlProxy ? `${new URL(urlProxy).origin}/` : "") +
+          urlStr.substring(asUrlProxy ? 1 : 0)
+      );
     } catch (err: any) {
       res.writeHead(500);
       return res.end(`${err.message}`);
     }
-    // generate ipv6 address from subnet
-    const ipAddr = getRandomIPv6(process.env.SUBNET);
-    console.log(`Proxying ${url.origin} with ${ipAddr}`);
+    // get ipv6 proxy and generate ipv6 address  from SUBNET
+    const ipv4Addr = process.env.AGENT_PROXY;
+    const ipv6Addr = getRandomIPv6(process.env.SUBNET);
+    console.log(`Proxying ${url.href} with ${ipv6Addr || ipv4Addr}`);
     // get agent
-    const agent = new (url.protocol === "http:" ? http : https).Agent(
-      ipAddr
-        ? {
-            localAddress: ipAddr,
-            family: 6,
-          }
-        : {}
-    );
+    let agent: http.Agent | https.Agent | HttpProxyAgent<string> | undefined;
+    if (ipv6Addr)
+      agent = new (url.protocol === "http:" ? http : https).Agent({
+        localAddress: ipv6Addr,
+        family: 6,
+      });
+    else if (ipv4Addr) agent = new HttpProxyAgent(ipv4Addr);
     // fetch request
     const reqHeaders = Object.assign(req.headers, {
       host: url.host,
@@ -64,8 +72,10 @@ const server = http.createServer(async (req, res) => {
     });
     // rewrite headers
     const resHeaders = Object.fromEntries(response.headers.entries());
-    const location = response.headers.get("location");
-    if (location) resHeaders.location = `/${location}`;
+    if (asUrlProxy) {
+      const location = response.headers.get("location");
+      if (location) resHeaders.location = `/${location}`;
+    }
     // pipe to reponse
     res.writeHead(response.status, resHeaders);
     if (response.body) await streamPipeline(response.body, res);
