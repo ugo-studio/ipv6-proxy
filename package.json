@@ -4,6 +4,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "npx esbuild ./src/index.ts --outfile=./dist/index.js --platform=node --bundle --format=cjs",
     "start": "node ./dist/index.js",
+    "test": "tsx test.ts",
     "daemon": "pm2 start ./dist/index.js --name ipv6_proxy",
     "start-pm": "npm run build && npm run daemon",
     "stop-pm": "pm2 stop ipv6_proxy && pm2 delete ipv6_proxy"

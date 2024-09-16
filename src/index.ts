@@ -23,16 +23,22 @@ function checkAuth(req: http.IncomingMessage) {
   else return false;
 }
 
-const server = http.createServer(async (req, res) => {
+// Server request handler
+const serverListener = async (
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+) => {
   try {
     // check auth
     if (!checkAuth(req)) {
       res.writeHead(401);
       return res.end("Proxy access denied");
     }
+
     // check if used as url proxy
     const urlStr = String(req.url);
     const asUrlProxy = urlStr.startsWith("/");
+
     // get target url
     let url: URL;
     try {
@@ -41,14 +47,23 @@ const server = http.createServer(async (req, res) => {
         (urlProxy ? `${new URL(urlProxy).origin}/` : "") +
           urlStr.substring(asUrlProxy ? 1 : 0)
       );
+      const isHttps = url.origin.includes(":443");
+      if (isHttps) {
+        url.protocol = "https:";
+        url = new URL(
+          url.href.replace(url.origin, url.origin.replace(":443", ""))
+        );
+      }
     } catch (err: any) {
       res.writeHead(500);
       return res.end(`${err.message}`);
     }
+
     // get ipv6 proxy and generate ipv6 address  from SUBNET
     const ipv4Addr = process.env.AGENT_PROXY;
     const ipv6Addr = getRandomIPv6(process.env.SUBNET);
     console.log(`Proxying ${url.href} with ${ipv6Addr || ipv4Addr}`);
+
     // get agent
     let agent: http.Agent | https.Agent | HttpProxyAgent<string> | undefined;
     if (ipv6Addr)
@@ -57,6 +72,7 @@ const server = http.createServer(async (req, res) => {
         family: 6,
       });
     else if (ipv4Addr) agent = new HttpProxyAgent(ipv4Addr);
+
     // fetch request
     const reqHeaders = Object.assign(req.headers, {
       host: url.host,
@@ -70,23 +86,32 @@ const server = http.createServer(async (req, res) => {
       headers: reqHeaders as any,
       redirect: "manual",
     });
-    // rewrite headers
+
+    // rewrite response headers
     const resHeaders = Object.fromEntries(response.headers.entries());
     if (asUrlProxy) {
       const location = response.headers.get("location");
       if (location) resHeaders.location = `/${location}`;
     }
-    // pipe to reponse
+
+    // pipe fetch reponse to client
     res.writeHead(response.status, resHeaders);
     if (response.body) await streamPipeline(response.body, res);
     return res.end();
   } catch (err: any) {
-    res.writeHead(500);
+    // handle error
+    try {
+      res.writeHead(500);
+    } catch (_) {}
     return res.end(`${err.message}`);
   }
-});
+};
+
+// Create HTTP server
+const server = http.createServer(serverListener);
 
 const port = Number(process.env.PORT || 4848);
+
 server.listen(port, "0.0.0.0", () =>
   console.log(`server listening at http://localhost:${port}`)
 );
